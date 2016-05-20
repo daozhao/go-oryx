@@ -1085,6 +1085,9 @@ func (v *RtmpConnection) ExpectConnectApp(r *RtmpRequest) (err error) {
 		if p, err = v.stack.DecodeMessage(m); err != nil {
 			return
 		}
+		if  ! (RtmpMsgVideoMessage == m.MessageType || RtmpMsgAudioMessage == m.MessageType) {
+			core.Trace.Println(ctx, "ExpectConnectApp <<<<<<< .",p.MessageType() )
+		}
 		if p, ok := p.(*RtmpConnectAppPacket); ok {
 			if p, ok := p.CommandObject.Get("tcUrl").(*Amf0String); ok {
 				r.TcUrl = string(*p)
@@ -1179,6 +1182,7 @@ func (v *RtmpConnection) Identify() (connType RtmpConnType, streamName string, d
 	ctx := v.ctx
 
 	err = v.identify(func(p RtmpPacket) (loop bool, err error) {
+		core.Info.Println(ctx, "Identify rtmpPacket type:" ,reflect.TypeOf(p))
 		switch p := p.(type) {
 		case *RtmpCreateStreamPacket:
 			core.Info.Println(ctx, "identify createStream")
@@ -1250,6 +1254,9 @@ func (v *RtmpConnection) FmleStartPublish() (err error) {
 		var p RtmpPacket
 		if p, err = v.stack.DecodeMessage(m); err != nil {
 			return
+		}
+		if  ! (RtmpMsgVideoMessage == m.MessageType || RtmpMsgAudioMessage == m.MessageType) {
+			core.Trace.Println(ctx, "FmleStartPublish <<<<<<< .",p.MessageType() )
 		}
 
 		switch p := p.(type) {
@@ -1519,6 +1526,9 @@ func (v *RtmpConnection) flush() (err error) {
 // to receive message from rtmp.
 func (v *RtmpConnection) RecvMessage(timeout time.Duration, fn func(*RtmpMessage) error) (err error) {
 	return v.read(timeout, func(m *RtmpMessage) (loop bool, err error) {
+		if  ! (RtmpMsgVideoMessage == m.MessageType || RtmpMsgAudioMessage == m.MessageType) {
+			core.Trace.Println(nil, "RecvMessage <<<<<<< .",m.MessageType )
+		}
 		return true, fn(m)
 	})
 }
@@ -1545,22 +1555,32 @@ func (v *RtmpConnection) identifyCreateStream(p0, p1 *RtmpCreateStreamPacket) (c
 	}
 
 	err = v.identify(func(p RtmpPacket) (loop bool, err error) {
+		core.Info.Println(ctx, "identifyCreateStream rtmpPacket type:" ,reflect.TypeOf(p))
 		switch p := p.(type) {
 		case *RtmpPlayPacket:
+			core.Info.Println(ctx, "identifyPlay RtmpPlayPacket")
 			connType, streamName, duration, err = v.identifyPlay(p)
 			return
 		case *RtmpPublishPacket:
+			core.Info.Println(ctx, "identify RtmpPublishPacket")
 			connType, streamName, err = v.identifyFlashPublish(p)
 			return
 		case *RtmpCreateStreamPacket:
 			// to avoid stack overflow attach.
+			core.Info.Println(ctx, "identify CreateStreamPacket ")
 			if p0 != nil {
 				err = createStreamError
 				core.Error.Println(ctx, "only support two createStream packet. err is", err)
 				return
 			}
 
+			core.Info.Println(ctx, "identify identifyCreateStream ")
 			connType, streamName, duration, err = v.identifyCreateStream(current, p)
+			return
+		default :
+			core.Info.Println(ctx, "identify unknow packet:",reflect.TypeOf(p))
+			connType, streamName, duration, err = v.Identify()
+			//connType, streamName, duration, err = v.identifyCreateStream(current, p)
 			return
 		}
 		return
@@ -1593,6 +1613,7 @@ func (v *RtmpConnection) identifyFmlePublish(p *RtmpFMLEStartPacket) (connType R
 func (v *RtmpConnection) identifyPlay(p *RtmpPlayPacket) (connType RtmpConnType, streamName string, duration float64, err error) {
 	connType = RtmpPlay
 	streamName = string(p.Stream)
+	core.Trace.Println(nil, "identifyPlay  streamName", streamName)
 	if !reflect.ValueOf(p.Duration).IsNil() {
 		duration = float64(*p.Duration)
 	}
@@ -1618,6 +1639,9 @@ func (v *RtmpConnection) identify(fn rtmpIdentifyHandler) (err error) {
 		if p == nil {
 			core.Warn.Println(ctx, "ignore empty packet.")
 			return true, nil
+		}
+		if  ! (RtmpMsgVideoMessage == m.MessageType || RtmpMsgAudioMessage == m.MessageType) {
+			core.Trace.Println(ctx, "identify <<<<<<< .",p.MessageType() )
 		}
 
 		switch mt := p.MessageType(); mt {
@@ -1667,6 +1691,10 @@ func (v *RtmpConnection) read(timeout time.Duration, fn rtmpReadHandler) (err er
 	for {
 		select {
 		case m := <-v.in:
+			if  ! (RtmpMsgVideoMessage == m.MessageType || RtmpMsgAudioMessage == m.MessageType) {
+				core.Trace.Println(ctx, "[1682]read Message <<<<<<< .", m.MessageType,fn)
+			}
+			//core.Trace.Println(ctx, "read Message <<<<<<< .",m.MessageType)
 			var loop bool
 			if loop, err = fn(m); err != nil || !loop {
 				return
